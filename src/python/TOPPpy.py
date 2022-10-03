@@ -18,7 +18,7 @@
 
 from .Utilities import vect2str, BezierToTrajectoryString
 from pylab import double, array, random
-from .TOPPbindings import TOPPInstance
+# from .TOPPbindings import TOPPInstance
 
 ################# Reading from string #####################
 
@@ -122,25 +122,27 @@ def ComputeKinematicConstraints(traj, amax, discrtimestep):
 ######################## Plots ############################
 
 def PlotProfiles(profileslist0, switchpointslist=[], figstart=None, colorscheme = 1):
-    from pylab import figure, clf, hold, plot, gca, axis, title, xlabel, ylabel, cycler
+    # from pylab import figure, clf, hold, plot, gca, axis, title, xlabel, ylabel, cycler
+    import matplotlib.pyplot as plt
     profileslist = list(profileslist0)
-    if figstart is not None:
-        figure(figstart)
-        clf()
-    hold('on')
+    # if figstart is not None:
+    #     figure(figstart)
+    #     clf()
+    # hold('on')
+    plt.figure()
     mvcbobrow = profileslist.pop(0)
     mvcdirect = profileslist.pop(0)
     if colorscheme == 1:
-        plot(mvcbobrow[2], mvcbobrow[3], 'c', linewidth=4)
-        plot(mvcdirect[2], mvcdirect[3], 'c--', linewidth=4)
+        plt.plot(mvcbobrow[2], mvcbobrow[3], 'c', linewidth=4)
+        plt.plot(mvcdirect[2], mvcdirect[3], 'c--', linewidth=4)
     else:
-        plot(mvcbobrow[2], mvcbobrow[3], 'm', linewidth=4)        
-        plot(mvcdirect[2], mvcdirect[3], 'm--', linewidth=4)
-    colorcycle = cycler('color', ['r', 'g', 'b', 'y', 'k'])
-    ax = gca()
-    ax.set_prop_cycle(colorcycle)
+        plt.plot(mvcbobrow[2], mvcbobrow[3], 'm', linewidth=4)        
+        plt.plot(mvcdirect[2], mvcdirect[3], 'm--', linewidth=4)
+    # colorcycle = cycler('color', ['r', 'g', 'b', 'y', 'k'])
+    # ax = plt.gca()
+    # ax.set_prop_cycle(colorcycle)
     for p in profileslist:
-        plot(p[2], p[3], 'k',linewidth=2)
+        plt.plot(p[2], p[3], 'k',linewidth=2)
     if len(profileslist) > 0:
         M = 2 * max([max(p[3]) for p in profileslist])
     else:
@@ -153,19 +155,20 @@ def PlotProfiles(profileslist0, switchpointslist=[], figstart=None, colorscheme 
             M = max(M, max(direct))
     for sw in switchpointslist:
         if sw[2] == 0:
-            plot(sw[0], sw[1], 'ro', markersize=8)
+            plt.plot(sw[0], sw[1], 'ro', markersize=8)
         if sw[2] == 1:
-            plot(sw[0], sw[1], 'go', markersize=8)
+            plt.plot(sw[0], sw[1], 'go', markersize=8)
         if sw[2] == 2:
-            plot(sw[0], sw[1], 'bo', markersize=8)
+            plt.plot(sw[0], sw[1], 'bo', markersize=8)
         if sw[2] == 3:
-            plot(sw[0], sw[1], 'yo', markersize=8)
+            plt.plot(sw[0], sw[1], 'yo', markersize=8)
     smax, sdmax = mvcbobrow[0], M
-    axis([0, smax, 0, sdmax])
+    plt.axis([0, smax, 0, sdmax])
     if colorscheme == 1:
-        title('Maximum Velocity Curves and profiles', fontsize=20)
-        xlabel('$s$', fontsize=22)
-        ylabel('$\dot s$', fontsize=22)
+        plt.title('Maximum Velocity Curves and profiles', fontsize=20)
+        plt.xlabel('$s$', fontsize=22)
+        plt.ylabel('$\dot s$', fontsize=22)
+    plt.show()
     return smax, sdmax  # return this for PlotPhase (yurk!)
 
 
@@ -204,65 +207,71 @@ def PlotAlphaBeta(topp_inst, prec=30):
 
 
 def PlotKinematics(traj0, traj1, dt=0.01, vmax=[], amax=[], figstart=0):
-    from pylab import figure, clf, hold, gca, title, xlabel, ylabel, plot, axis, cycler
+    # from pylab import figure, clf, hold, gca, title, xlabel, ylabel, plot, axis, cycler
+    import matplotlib.pyplot as plt
     x = ['r', 'g', 'b', 'y', 'k']
-    colorcycle = cycler('color', x[0:traj0.dimension])
+    # colorcycle = cycler('color', x[0:traj0.dimension])
     Tmax = max(traj0.duration, traj1.duration)
+    fig = plt.figure()
 
     # Joint angles
-    figure(figstart)
-    clf()
-    hold('on')
-    ax = gca()
-    ax.set_prop_cycle(colorcycle)
+    # figure(figstart)
+    # clf()
+    plt.subplot(3, 1, 1)
+    # hold('on')
+    # ax = gca()
+    # ax.set_prop_cycle(colorcycle)
     traj0.Plot(dt, '--')
-    ax.set_prop_cycle(colorcycle)
+    # ax.set_prop_cycle(colorcycle)
     traj1.Plot(dt)
-    title('Joint values', fontsize=20)
-    xlabel('Time (s)', fontsize=18)
-    ylabel('Joint values (rad)', fontsize=18)
+    plt.title('Joint values', fontsize=20)
+    plt.xlabel('Time (s)', fontsize=18)
+    plt.ylabel('Joint values (rad)', fontsize=18)
 
     # Velocity
-    figure(figstart + 1)
-    clf()
-    hold('on')
-    ax = gca()
-    ax.set_prop_cycle(colorcycle)
+    # figure(figstart + 1)
+    # clf()
+    # hold('on')
+    # ax = gca()
+    # ax.set_prop_cycle(colorcycle)
+    plt.subplot(3, 1, 2)
     traj0.Plotd(dt, '--')
-    ax.set_prop_cycle(colorcycle)
+    # ax.set_prop_cycle(colorcycle)
     traj1.Plotd(dt)
     for v in vmax:
-        plot([0, Tmax], [v, v], '-.')
+        plt.plot([0, Tmax], [v, v], '-.')
     for v in vmax:
-        plot([0, Tmax], [-v, -v], '-.')
+        plt.plot([0, Tmax], [-v, -v], '-.')
     if len(vmax) > 0:
         Vmax = 1.2 * max(vmax)
         if Vmax < 0.1:
             Vmax = 10
-        axis([0, Tmax, -Vmax, Vmax])
-    title('Joint velocities', fontsize=20)
-    xlabel('Time (s)', fontsize=18)
-    ylabel('Joint velocities (rad/s)', fontsize=18)
+        plt.axis([0, Tmax, -Vmax, Vmax])
+    plt.title('Joint velocities', fontsize=20)
+    plt.xlabel('Time (s)', fontsize=18)
+    plt.ylabel('Joint velocities (rad/s)', fontsize=18)
 
     # Acceleration
-    figure(figstart + 2)
-    clf()
-    ax = gca()
-    ax.set_prop_cycle(colorcycle)
-    hold('on')
+    # figure(figstart + 2)
+    # clf()
+    # ax = gca()
+    # ax.set_prop_cycle(colorcycle)
+    # hold('on')
+    plt.subplot(3, 1, 3)
     traj0.Plotdd(dt, '--')
-    ax.set_prop_cycle(colorcycle)
+    # ax.set_prop_cycle(colorcycle)
     traj1.Plotdd(dt)
     for a in amax:
-        plot([0, Tmax], [a, a], '-.')
+        plt.plot([0, Tmax], [a, a], '-.')
     for a in amax:
-        plot([0, Tmax], [-a, -a], '-.')
+        plt.plot([0, Tmax], [-a, -a], '-.')
     if len(amax) > 0:
         Amax = 1.2 * max(amax)
-        axis([0, Tmax, -Amax, Amax])
-    title('Joint accelerations', fontsize=20)
-    xlabel('Time (s)', fontsize=18)
-    ylabel('Joint accelerations (rad/s^2)', fontsize=18)
+        plt.axis([0, Tmax, -Amax, Amax])
+    plt.title('Joint accelerations', fontsize=20)
+    plt.xlabel('Time (s)', fontsize=18)
+    plt.ylabel('Joint accelerations (rad/s^2)', fontsize=18)
+    plt.show()
 
 
 def string2p(s):

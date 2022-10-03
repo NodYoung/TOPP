@@ -4,7 +4,8 @@ import pylab, scipy
 import io
 from scipy import misc
 
-from pylab import arange, array, double, plot, zeros
+# from pylab import arange, array, double, plot, zeros
+import matplotlib.pyplot as plt
 
 import sys
 if sys.version_info < (3,):
@@ -140,17 +141,17 @@ class PiecewisePolynomialTrajectory():
     def Plot(self, dt, f=''):
         tvect = arange(0, self.duration + dt, dt)
         qvect = array([self.Eval(t) for t in tvect])
-        plot(tvect, qvect, f, linewidth=2)
+        plt.plot(tvect, qvect, f, linewidth=2)
 
     def Plotd(self, dt, f=''):
         tvect = arange(0, self.duration + dt, dt)
         qdvect = array([self.Evald(t) for t in tvect])
-        plot(tvect, qdvect, f, linewidth=2)
+        plt.plot(tvect, qdvect, f, linewidth=2)
 
     def Plotdd(self, dt, f=''):
         tvect = arange(0, self.duration + dt, dt)
         qddvect = array([self.Evaldd(t) for t in tvect])
-        plot(tvect, qddvect, f, linewidth=2)
+        plt.plot(tvect, qddvect, f, linewidth=2)
 
     def __str__(self):
         return '\n'.join([str(chunk) for chunk in self.chunkslist])

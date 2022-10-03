@@ -5,3 +5,9 @@
 .*.swp
 build/
 timeopt
+.vscode
+constraint_string
+profiles_list
+result_trajectory
+switchpoints_list
+trajectory_string
