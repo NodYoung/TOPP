@@ -8,6 +8,9 @@ set(glog_LIBRARY_DIRS "/usr/lib/x86_64-linux-gnu")
 set(glog_LIBS "glog")
 include_directories(${glog_INCLUDE_DIRS})
 
+#json —— sudo apt install nlohmann-json3-dev
+find_package(nlohmann_json REQUIRED)
+
 #boost
 find_package(Boost COMPONENTS system filesystem date_time)
 message("boost include path: ${Boost_INCLUDE_DIRS}")
@@ -22,5 +25,5 @@ set (TOPP_CODE ../src/Errors.h ../src/KinematicLimits.h ../src/KinematicLimits.c
 
 add_library(TOPP SHARED ${TOPP_CODE} )
 add_executable(quick_example1 quick_example1.cpp)
-target_link_libraries(quick_example1 TOPP ${glog_LIBS} ${Boost_LIBRARIES})
+target_link_libraries(quick_example1 TOPP ${glog_LIBS} ${Boost_LIBRARIES} nlohmann_json::nlohmann_json)
 

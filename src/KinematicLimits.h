@@ -21,6 +21,7 @@
 
 namespace TOPP {
 
+/// 实现速度和加速度约束
 class KinematicLimits : public Constraints {
 public:
     KinematicLimits() : Constraints(){
@@ -29,7 +30,7 @@ public:
 
     //////////////// Overloaded methods //////////////////////
     std::pair<dReal,dReal> SddLimits(dReal s, dReal sd);
-    dReal SddLimitAlpha(dReal s, dReal sd);
+    dReal SddLimitAlpha(dReal s, dReal sd); /// 得到满足加速度约束的sddt
     dReal SddLimitBeta(dReal s, dReal sd);
     void FindSingularSwitchPoints();
     void Discretize();

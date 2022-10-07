@@ -17,7 +17,7 @@
 
 
 #include "TOPP.h"
-
+#include <glog/logging.h>
 
 namespace TOPP {
 
@@ -171,7 +171,7 @@ void Chunk::Write(std::stringstream& ss) {
 
 void Trajectory::InitFromChunksList(const std::list<Chunk>&chunkslist0) {
     chunkslist = chunkslist0;
-    BOOST_ASSERT(chunkslist.size()>0);
+    assert(chunkslist.size()>0);
     dimension = chunkslist.front().dimension;
     degree = chunkslist.front().degree;
 
@@ -190,6 +190,7 @@ void Trajectory::InitFromChunksList(const std::list<Chunk>&chunkslist0) {
         }
         itchunk++;
     }
+    LOG(INFO) << "Trajectory::duration=" << duration;
     chunkcumulateddurationslist.push_back(duration);
 }
 

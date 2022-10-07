@@ -1,28 +1,31 @@
 from numpy import *
 from scipy import interpolate
 from . import Trajectory
+import logging
 
 def InterpolateViapoints(path):
-    nviapoints = len(path[0,:])
-    tv = linspace(0,1,nviapoints)
-    for i in range(nviapoints-1):
-        tv[i+1] = tv[i]+linalg.norm(path[:,i]-path[:,i+1])
-    tcklist = []
-    for idof in range(0,path.shape[0]):
-        tcklist.append(interpolate.splrep(tv,path[idof,:],s=0))
-    t = tcklist[0][0]
-    chunkslist = []
-    for i in range(len(t)-1):
-        polylist = []
-        if abs(t[i+1]-t[i])>1e-5:
-            for tck in tcklist:
-                a = 1/6. * interpolate.splev(t[i],tck,der=3)
-                b = 0.5 * interpolate.splev(t[i],tck,der=2)
-                c = interpolate.splev(t[i],tck,der=1)
-                d = interpolate.splev(t[i],tck,der=0)
-                polylist.append(Trajectory.Polynomial([d,c,b,a]))
-            chunkslist.append(Trajectory.Chunk(t[i+1]-t[i],polylist))
-    return Trajectory.PiecewisePolynomialTrajectory(chunkslist)
+  nviapoints = len(path[0,:])
+  tv = linspace(0,1,nviapoints)
+  for i in range(nviapoints-1):
+    tv[i+1] = tv[i]+linalg.norm(path[:,i]-path[:,i+1])
+  logging.info('tv={}'.format(tv))  # 这里的tv是弧长s
+  tcklist = []
+  for idof in range(0,path.shape[0]): # path.shape = (2, 5)
+    tcklist.append(interpolate.splrep(tv,path[idof,:],s=0)) # [scipy.interpolate.splrep](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.splrep.html)
+  logging.info('tcklist={}'.format(tcklist))
+  t = tcklist[0][0]
+  chunkslist = []
+  for i in range(len(t)-1):
+    polylist = []
+    if abs(t[i+1]-t[i])>1e-5:
+      for tck in tcklist:
+        a = 1/6. * interpolate.splev(t[i],tck,der=3)
+        b = 0.5 * interpolate.splev(t[i],tck,der=2)
+        c = interpolate.splev(t[i],tck,der=1)
+        d = interpolate.splev(t[i],tck,der=0)
+        polylist.append(Trajectory.Polynomial([d,c,b,a]))
+      chunkslist.append(Trajectory.Chunk(t[i+1]-t[i],polylist))
+  return Trajectory.PiecewisePolynomialTrajectory(chunkslist)
 
 
 

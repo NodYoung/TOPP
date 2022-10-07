@@ -6,6 +6,7 @@ from python import TOPPpy
 from python import Trajectory
 from python import Utilities
 
+
 def save_topp_input(trajectorystring, constraintstring):
   with open('trajectory_string', 'w') as f:
     f.write(trajectorystring)
@@ -21,40 +22,40 @@ def load_topp_output():
     traj1 = Trajectory.PiecewisePolynomialTrajectory.FromString(f.read())
   return profiles_list, switchpoints_list, traj1
 
-# reference: [Kinematic limits (initial trajectory specified by via-points)](https://github.com/quangounet/TOPP/wiki/Quick-examples)
-class QuickExample1(object):
+# reference: [Kinematic limits (initial trajectory specified by trajectorystring)](https://github.com/quangounet/TOPP/wiki/Quick-examples)
+class QuickExample2(object):
   def __init__(self):
-    # A two-dof path going through 5 viapoints (0,1) - (1,1) - (5,1) - (3,2) - (5,4)
-    path = np.array([[0,1,5,3,5],[1,1,1,2,4]])
-    self.traj0 = Utilities.InterpolateViapoints(path) # Interpolate using splines
+    ndof = 5
+    trajectorystring = """1.0
+    5
+    -0.495010 1.748820 -2.857899 1.965396
+    0.008319 0.004494 1.357524 -1.289918
+    -0.354081 1.801074 -1.820616 0.560944
+    0.221734 -1.320792 3.297177 -2.669786
+    -0.137741 0.105246 0.118968 -0.051712
+    1.0
+    5
+    0.361307 1.929207 -4.349490 2.275776
+    0.080419 -1.150212 2.511645 -1.835906
+    0.187321 -0.157326 -0.355785 0.111770
+    -0.471667 -2.735793 7.490559 -4.501124
+    0.034761 0.188049 -1.298730 1.553443"""
+    self.traj0 = Trajectory.PiecewisePolynomialTrajectory.FromString(trajectorystring)
     # Constraints
-    self.vmax = 2*np.ones(self.traj0.dimension)  # Velocity limits
-    logging.info('vmax={}'.format(self.vmax))
-    self.amax = 10*np.ones(self.traj0.dimension) # Acceleration limits
-    self.profiles_list = None
-    self.switchpoints_list = None
-    self.traj1 = None
+    self.vmax = 2*np.ones(ndof)  # Velocity limits
+    self.amax = 10*np.ones(ndof) # Acceleration limits
 
   def save_traj_constrain(self):
     trajectorystring = str(self.traj0)
-    discrtimestep = 0.005
+    discrtimestep = 0.01
     constraintstring = str(discrtimestep)
     constraintstring += "\n" + ' '.join([str(v) for v in self.vmax])
     constraintstring += TOPPpy.ComputeKinematicConstraints(self.traj0, self.amax, discrtimestep)
-    # logging.info('ComputeKinematicConstraintsJson={}'.format(TOPPpy.ComputeKinematicConstraintsJson(self.traj0, self.vmax, self.amax, discrtimestep)))
     save_topp_input(trajectorystring, constraintstring)
   
-  def plot_topp_result(self):
+  def plot_topp_res(self):
     profiles_list, switchpoints_list, traj1 = load_topp_output()
     TOPPpy.PlotProfiles(profiles_list, switchpoints_list, 4)
     dtplot = 0.01
     TOPPpy.PlotKinematics(self.traj0, traj1, dtplot, self.vmax, self.amax)
 
-
-if __name__ == '__main__':
-  logging.basicConfig(level=logging.INFO, format="%(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s")
-  qe1 = QuickExample1()
-  qe1.save_traj_constrain()
-  # qe1.plot_topp_result()
-
-  

@@ -10,7 +10,7 @@ int read_topp_input(std::string& trajectory_string, std::string& constraint_stri
   ft_ss << ft.rdbuf();
   ft.close();
   trajectory_string = ft_ss.str();
-  LOG(INFO) << ft_ss.str();
+  // LOG(INFO) << ft_ss.str();
   std::ifstream fc("../constraint_string");
   std::stringstream fc_ss;
   fc_ss << fc.rdbuf();

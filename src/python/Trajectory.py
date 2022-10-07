@@ -48,6 +48,9 @@ class Polynomial(object):
     def __str__(self):
         return " ".join(map(str, self.coeff_list))
 
+    def export_json(self):
+        return {'d': float(self.coeff_list[0]),'c': float(self.coeff_list[1]), 'b': float(self.coeff_list[2]),'a': float(self.coeff_list[3]), 'note': 'ax^3+bx^2+cx+d=0'}
+
 
 class Chunk():
     def __init__(self, duration, poly_list):
@@ -89,6 +92,9 @@ class Chunk():
     def __str__(self):
         chunks_str = '\n'.join(map(str, self.polynomialsvector))
         return '%s\n%d\n%s' % (str(self.duration), self.dimension, chunks_str)
+    
+    def export_json(self):
+        return {'duration': self.duration, 'dimension': self.dimension, 'polysvec': [poly.export_json() for poly in self.polynomialsvector]}
 
 
 class PiecewisePolynomialTrajectory():
@@ -155,6 +161,9 @@ class PiecewisePolynomialTrajectory():
 
     def __str__(self):
         return '\n'.join([str(chunk) for chunk in self.chunkslist])
+    
+    def export_json(self):
+        return {'PiecewisePolynomialTrajectory': [chunk.export_json() for chunk in self.chunkslist]}
 
 
 def CropChunk(c, s0, s1):

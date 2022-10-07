@@ -17,7 +17,9 @@
 
 
 #include "TOPP.h"
-
+#include <glog/logging.h>
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 namespace TOPP {
 
@@ -32,24 +34,55 @@ bool Constraints::Preprocess() {
     resprofileslist.resize(0);
     // Change discrtimestep so as it becomes a divisor of trajectory duration
     int ndiscrsteps = int((trajectory.duration+1e-10)/discrtimestep);
+    LOG(INFO) << "ndiscrsteps=" << ndiscrsteps;
 
     if(ndiscrsteps<1) {
         return false;
     }
 
     discrtimestep = trajectory.duration/ndiscrsteps;
-    Discretize();
-
-    ComputeMVCBobrow();
-
-    ComputeMVCCombined();
-
+    LOG(INFO) << "discrtimestep=" << discrtimestep;
+    Discretize(); /// 计算得到离散化的s
+    {
+      nlohmann::json j;
+      j["discrsvect"] = nlohmann::json(discrsvect);
+      std::ofstream o("../discrsvect.json");
+      o << std::setw(2) << j << std::endl;
+    }
+    ComputeMVCBobrow(); /// 计算a*sdd+b*sd^2+c<=0约束下的最大速度sd曲线
+    {
+      nlohmann::json j;
+      j["mvcbobrow"] = nlohmann::json(mvcbobrow);
+      std::ofstream o("../mvcbobrow.json");
+      o << std::setw(2) << j << std::endl;
+    }
+    ComputeMVCCombined(); /// 计算a*sdd+b*sd^2+c<=0和sd<=qd/qds结合的最大速度sd曲线
+    {
+      nlohmann::json j;
+      j["mvccombined"] = nlohmann::json(mvccombined);
+      std::ofstream o("../mvccombined.json");
+      o << std::setw(2) << j << std::endl;
+    }
     FindSwitchPoints();
-
+    {
+      nlohmann::json j;
+      std::list<SwitchPoint>::iterator itsw = switchpointslist.begin();
+      while(itsw != switchpointslist.end()) {
+        nlohmann::json t;
+        t["s"] = itsw->s;
+        t["sd"] = itsw->sd;
+        t["switchpointtype"] = itsw->switchpointtype;
+        j["switchpointslist"].push_back(t);
+        itsw++;
+      }
+      std::ofstream o("../switchpointslist.json");
+      o << std::setw(2) << j << std::endl;
+    }
 
     if(passswitchpointnsteps == 0) {
         passswitchpointnsteps = 5;
     }
+    LOG(INFO) << "passswitchpointnsteps=" << passswitchpointnsteps;
 
     // Set integration timestep automatically if it is initially set to 0
     dReal meanmvc = 0;
@@ -59,9 +92,9 @@ bool Constraints::Preprocess() {
         }
         meanmvc /= mvccombined.size();
         meanmvc = std::min(1.,meanmvc);
-        integrationtimestep = discrtimestep/meanmvc;
+        integrationtimestep = discrtimestep/meanmvc;  /// 最小discrtimestep，速度小时可以步子更大些
     }
-
+    LOG(INFO) << "integrationtimestep=" << integrationtimestep;
     return true;
 }
 
@@ -69,6 +102,7 @@ bool Constraints::Preprocess() {
 void Constraints::Discretize() {
     ndiscrsteps = int((trajectory.duration+TINY)/discrtimestep);
     ndiscrsteps++;
+    LOG(INFO) << "ndiscrsteps=" << ndiscrsteps;
     discrsvect.resize(ndiscrsteps);
     for(int i=0; i<ndiscrsteps; i++) {
         discrsvect[i] = i*discrtimestep;
@@ -79,7 +113,7 @@ void Constraints::Discretize() {
 void Constraints::ComputeMVCBobrow() {
     mvcbobrow.resize(ndiscrsteps);
     for(int i=0; i<ndiscrsteps; i++) {
-        mvcbobrow[i] = SdLimitBobrowInit(discrsvect[i]);
+        mvcbobrow[i] = SdLimitBobrowInit(discrsvect[i]);  /// 计算a*sdd+b*sd^2+c<=0约束下的最大速度sd
     }
 }
 
@@ -88,7 +122,7 @@ void Constraints::ComputeMVCCombined()
 {
     mvccombined.resize(ndiscrsteps);
     for(int i=0; i<ndiscrsteps; i++) {
-        mvccombined[i] = SdLimitCombinedInit(discrsvect[i]);
+        mvccombined[i] = SdLimitCombinedInit(discrsvect[i]);  /// 计算a*sdd+b*sd^2+c<=0和sd<=qd/qds结合的sd
     }
 }
 
@@ -115,7 +149,7 @@ dReal Constraints::SdLimitCombinedInit(dReal s){
         trajectory.Evald(s, qd);
         for(int i=0; i<trajectory.dimension; i++) {
             if(std::abs(qd[i])>TINY && std::abs(vmax[i])>0) {
-                res = std::min(res,vmax[i]/std::abs(qd[i]));
+                res = std::min(res,vmax[i]/std::abs(qd[i]));  /// (dq/dt)/(dq/ds)=sd
             }
         }
     }
@@ -242,12 +276,13 @@ void Constraints::FindTangentSwitchPoints(){
     snext = discrsvect[i+1];
     sd = SdLimitBobrow(s);
     sdnext = SdLimitBobrow(snext);
-    tangent = (sdnext-sd)/discrtimestep;
+    tangent = (sdnext-sd)/discrtimestep;  // d{ds/dt}/ds d(y)/dx=斜率
     prevtangent = (sd - SdLimitBobrow(discrsvect[i-1]))/discrtimestep;
     sddlimits = SddLimits(s,sd);
-    alpha = sddlimits.first;
+    alpha = sddlimits.first;  // d{ds/dt}/dt，这里在sd_max_acc处，alpha和beta相等
     //beta = sddlimits.second;
-    diffprev = alpha/sd - tangent;
+    // LOG(INFO) << "sddlimits.first=" << sddlimits.first << ", sddlimits.second=" << sddlimits.second;
+    diffprev = alpha/sd - tangent;  // d(ds/dt)/ds = d{ds/dt}/dt*dt/ds
 
     for(int i=2; i<ndiscrsteps-1; i++) {
         s = discrsvect[i];
@@ -266,7 +301,7 @@ void Constraints::FindTangentSwitchPoints(){
         //}
         //beta = sddlimits.second;
         diff = alpha/sd - tangent;
-        if(diffprev*diff<0 && std::abs(diff)<1) {
+        if(diffprev*diff<0 && std::abs(diff)<1) { // 一个大于切向量，一个小于切向量，所以中间必然存在一点alpha/sd=tangent
             AddSwitchPoint2(s,sd,SP_TANGENT);
         }
         diffprev = diff;
@@ -287,7 +322,7 @@ void Constraints::FindDiscontinuousSwitchPoints() {
         sdnn = SdLimitBobrow(discrsvect[i+2]);
         if(std::abs(sdnn-sdn)>100*std::abs(sdn-sd)) {
             if(sdn<sdnn) {
-                AddSwitchPoint2(discrsvect[i+1],mvcbobrow[i+1],SP_DISCONTINUOUS);
+                AddSwitchPoint2(discrsvect[i+1],mvcbobrow[i+1],SP_DISCONTINUOUS); /// 记录的是sd较小者对应的s
             }
             else{
                 AddSwitchPoint2(discrsvect[i+2],mvcbobrow[i+2],SP_DISCONTINUOUS);
@@ -310,7 +345,7 @@ void Constraints::FindDiscontinuousSwitchPoints() {
     }
 }
 
-
+/// 先排SP_SINGULAR再排其他类型的SP，SP_SINGLAR按sd从小到大排列，其他类型也按从小到大排列
 void InsertInSpList(std::list<SwitchPoint>& splist, SwitchPoint sp){
     if(splist.size()==0) {
         splist.push_back(sp);
@@ -452,6 +487,12 @@ void Constraints::TrimSwitchPoints() {
         InsertInSpList(splist,*it);
         it++;
     }
+    // for(std::list<SwitchPoint>::iterator sit=switchpointslist.begin(); sit!=switchpointslist.end(); sit++) {
+    //   LOG(INFO) << "s=" << sit->s << ", sd=" << sit->sd << ", switchpointtype=" << sit->switchpointtype;
+    // }
+    // for(std::list<SwitchPoint>::iterator sit=splist.begin(); sit!=splist.end(); sit++) {
+    //   LOG(INFO) << "s=" << sit->s << ", sd=" << sit->sd << ", switchpointtype=" << sit->switchpointtype;
+    // }
     switchpointslist = splist;
 }
 
@@ -482,6 +523,7 @@ QuadraticConstraints::QuadraticConstraints(const std::string& constraintsstring)
         cvect.push_back(tmpvect);
     }
     nconstraints = int(avect.front().size());
+    LOG(INFO) << "nconstraints: " << nconstraints;
     hasvelocitylimits =  VectorMax(vmax) > TINY;
 }
 
@@ -571,7 +613,7 @@ void QuadraticConstraints::ComputeSlopeDynamicSingularity(dReal s, dReal sd, std
         bp = (b2[i]-b[i])*idelta;
         cp = (c2[i]-c[i])*idelta;
         if(std::abs((2*b[i]+ap)*sd)>TINY) {
-            slope = (-bp*sd*sd-cp)/((2*b[i]+ap)*sd);
+            slope = (-bp*sd*sd-cp)/((2*b[i]+ap)*sd);  /// 对应论文公式10
         }
         else{
             slope = 0;
@@ -583,15 +625,15 @@ void QuadraticConstraints::ComputeSlopeDynamicSingularity(dReal s, dReal sd, std
 std::pair<dReal,dReal> QuadraticConstraints::SddLimits(dReal s, dReal sd){
     dReal dtsq = integrationtimestep;
     dtsq = dtsq*dtsq;
-    dReal alpha = -INF;
-    dReal beta = INF;
+    dReal alpha = -INF; // 下界
+    dReal beta = INF; // 上届
     dReal sdsq = sd*sd;
     std::vector<dReal> a, b, c;
 
     dReal alpha_i, beta_i;
     InterpolateDynamics(s,a,b,c);
 
-    for(int i=0; i<nconstraints; i++) {
+    for(int i=0; i<nconstraints; i++) { /// 《A General, Fast, and Robust Implementation of the Time-Optimal Path Parameterization Algorithm》II.B
         if(std::abs(a[i])<TINY) {
             if(b[i]*sdsq+c[i]>0) {
                 // Constraint not satisfied
@@ -602,11 +644,11 @@ std::pair<dReal,dReal> QuadraticConstraints::SddLimits(dReal s, dReal sd){
         }
         if(a[i]>0) {
             beta_i = (-sdsq*b[i]-c[i])/a[i];
-            beta = std::min(beta,beta_i);
+            beta = std::min(beta,beta_i); /// 最大加速度
         }
         else{
             alpha_i = (-sdsq*b[i]-c[i])/a[i];
-            alpha = std::max(alpha,alpha_i);
+            alpha = std::max(alpha,alpha_i);  /// 最小加速度
         }
     }
     std::pair<dReal,dReal> result(alpha,beta);
@@ -616,7 +658,7 @@ std::pair<dReal,dReal> QuadraticConstraints::SddLimits(dReal s, dReal sd){
 
 dReal QuadraticConstraints::SdLimitBobrowInit(dReal s){
     std::vector<dReal> a, b, c;
-    InterpolateDynamics(s,a,b,c);
+    InterpolateDynamics(s,a,b,c); /// 插值得到s处的abc
     if(VectorNorm(a)<TINY) {
         if(s<1e-2) {
             s+=1e-3;
@@ -626,7 +668,7 @@ dReal QuadraticConstraints::SdLimitBobrowInit(dReal s){
         }
         InterpolateDynamics(s,a,b,c);
     }
-    std::pair<dReal,dReal> sddlimits = SddLimits(s,0);
+    std::pair<dReal,dReal> sddlimits = SddLimits(s,0);  // 速度为0时的(sdd_min, sdd_max)
     if(sddlimits.first > sddlimits.second) {
         return 0;
     }
@@ -637,6 +679,7 @@ dReal QuadraticConstraints::SdLimitBobrowInit(dReal s){
             dReal num, denum, r;
             // If we have a pair of alpha and beta bounds, then determine the sdot for which the two bounds are equal
             if(a[k]*a[m]<0) {
+                // 不失一般性，令a[m]>0,a[k]<0.分别的sdd_max=(-c_m-b_m*sd^2)/a_m, sdd_min=(-c_k-b_k*sd^2)/a_k。sdd_max=sdd_min可得sd^2，即r。
                 num = a[k]*c[m]-a[m]*c[k];
                 denum = -a[k]*b[m]+a[m]*b[k];
                 if(std::abs(denum)>TINY) {
@@ -712,23 +755,23 @@ void QuadraticConstraints::FindSingularSwitchPoints() {
                 dReal adiff = a[j] - aprev[j];
                 dReal ccur=c[j], bcur=b[j], scur=discrsvect[i];
                 if( fabs(adiff) > TINY ) {
-                    // compute the zero-crossing and linearly interpolate dynamics
+                    // compute the zero-crossing and linearly interpolate dynamics  可以选择横轴s纵轴a，画一下就能看出来。这里计算a=0是对应的s、b、c
                     dReal interp=-aprev[j]/adiff;
                     scur = discrsvect[i-1] + interp*(discrsvect[i]-discrsvect[i-1]);
                     bcur = bprev[j] + interp*(b[j]-bprev[j]);
                     ccur = cprev[j] + interp*(c[j]-cprev[j]);
                 }
-
+                // LOG(INFO) << "ccur=" << ccur; /// We prove in the Appendix that, if the path is traversable, then ck(s∗) < 0
                 dReal f = ccur/bcur;
                 if(f<0) {
                     dReal sdstar = sqrt(-f);
-                    dReal sdplus = SdLimitBobrowExclude(scur,j);
+                    dReal sdplus = SdLimitBobrowExclude(scur,j);  // 对应论文里C. Characterizing Dynamic Singularities的\dot{s}^\dagger
                     if(sdplus >0 && sdplus < sdstar) {
                         continue;
                     }
                     if( !found || sdstar < minsd ) {
                         found = true;
-                        minsd = sdstar;
+                        minsd = sdstar; /// 此时产生了一个undifferentiable dynamic singularity SP
                         mins = scur;
                     }
                 }
@@ -992,7 +1035,7 @@ bool AddressSwitchPoint(Constraints& constraints, const SwitchPoint &switchpoint
         dReal testsd = sd;
         for(int itry = 0; itry < 5; ++itry) {
             testsd *= constraints.loweringcoef;
-            sdtop = BisectionSearch(constraints,s,testsd,sd,constraints.integrationtimestep,0);
+            sdtop = BisectionSearch(constraints,s,testsd,sd,constraints.integrationtimestep,0); /// 通过二分法经验式的寻找可以前后通过的sd
             if(sdtop>0) {
                 break;
             }
@@ -1268,12 +1311,13 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
 //    }
 
     // Integrate forward
+    LOG(INFO) << "maxsteps=" << maxsteps << ", zlajpah=" << zlajpah << ", testmvc=" << testmvc;
     while(cont) {
-        if(int(svect.size()) > maxsteps) {
+        if(int(svect.size()) > maxsteps) {  // 超过最大迭代步数
             returntype = INT_MAXSTEPS;
             break;
         }
-        else if(scur > constraints.trajectory.duration) {
+        else if(scur > constraints.trajectory.duration) { // 到达s_{end}
             //TODO: change the time step of previous step to reach the end
             svect.push_back(scur);
             sdvect.push_back(sdcur);
@@ -1281,7 +1325,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
             returntype = INT_END;
             break;
         }
-        else if(sdcur < 0) {
+        else if(sdcur < 0) {  // 到达\dot{s}=0
             //TODO: double check whether alpha>beta
             svect.push_back(scur);
             sdvect.push_back(sdcur);
@@ -1289,7 +1333,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
             returntype = INT_BOTTOM;
             break;
         }
-        else if(IsAboveProfilesList(scur,sdcur,constraints.resprofileslist)) {
+        else if(IsAboveProfilesList(scur,sdcur,constraints.resprofileslist)) {  // 到达result profile上方
             svect.push_back(scur);
             sdvect.push_back(sdcur);
             sddvect.push_back(0);
@@ -1297,7 +1341,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
             break;
         }
         else if(zlajpah && testmvc && sdcur >= constraints.SdLimitCombined(scur)-TINY2) {
-            if(constraints.SdLimitBobrow(scur)-constraints.SdLimitCombined(scur)<TINY2) {
+            if(constraints.SdLimitBobrow(scur)-constraints.SdLimitCombined(scur)<TINY2) { // 触碰到MVC
                 svect.push_back(scur);
                 sdvect.push_back(sdcur);
                 sddvect.push_back(0);
@@ -1306,7 +1350,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
             }
 
             // Lower the sd to the MVC and integrate backward
-            if(svect.size()==0) {
+            if(svect.size()==0) { // 第一个点速度过大，降低sd并后向积分
                 sdcur = constraints.SdLimitCombined(scur);
                 Profile tmpprofile;
                 //std::cout << "Integrate backward from (" <<scur << "," << sdcur  <<  ")\n";
@@ -1337,9 +1381,9 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
             //b) alpha points below MVCCombined (slide case); then slide along MVCCombined, which is admissible, until either
             // b1) alpha points above MVCCombined (trapped)
             // b2) beta points below MVCCombined (exit slide)
-
-            int res = FlowVsMVC(constraints,scur,sdcur,1,dt);
-            if(res == 0) {
+            LOG(INFO) << "Now we have sdcombined < sdcur <= sdbobrow. svect.size()=" << svect.size() << ", scur=" << scur << ", sdcur=" << sdcur;
+            int res = FlowVsMVC(constraints,scur,sdcur,1,dt); // 沿着最大减速度走一步，并判断其是否在MVCCombined下方
+            if(res == 0) {  // 到达s_{end}
                 // Most probably we arrived at the end
                 svect.push_back(scur);
                 sdvect.push_back(sdcur);
@@ -1348,7 +1392,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
                 break;
             }
             else if(res == 1) {
-                // Case a
+                // Case a 一步减速后依然在MVCCombined上方,那就一直沿着最大减速度走，直到位于MVCCombined下方
                 //std::cout <<"\nZlajpah trap ("<< scur << "," << sdcur << ") \n";
                 // Insert the profile calculated so far into the resprofileslist
                 if( svect.size() > 1 ) {
@@ -1394,7 +1438,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
                 }
             }
             else {
-                // Case b
+                // Case b 一步减速后在MVCCombined下方，那么沿着MVCCombined往前走。直到sdd不能满足沿着走
 
                 //std::cout <<"\nSlide ("<< scur << "," << sdcur << ") \n";
                 while(true) {
@@ -1451,7 +1495,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
                         break;
                     }
                     else if(res1 == 1) {
-                        // Case b1
+                        // Case b1 往前走一个最大减速度，在MVCCombined上方
                         //std::cout << "End slide with trap (" <<snext << "," << sdnext  <<  ")\n";
                         break;
                     }
@@ -1462,7 +1506,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
                         break;
                     }
                     else if(res2 == -1) {
-                        // Case b2
+                        // Case b2  往前走一个最大加速度，在MVCCombined下方
                         //std::cout << "End slide with exit (" <<snext << "," << sdnext  <<  ")\n";
                         break;
                     }
@@ -1473,6 +1517,7 @@ int IntegrateForward(Constraints& constraints, dReal sstart, dReal sdstart, dRea
             svect.push_back(scur);
             sdvect.push_back(sdcur);
             sddvect.push_back(0);
+            LOG(INFO) << "zlajpahlist.push_back. scur=" << scur << ", sdcur=" << sdcur;
             constraints.zlajpahlist.push_back(std::pair<dReal,dReal>(scur,sdcur));
             returntype = INT_MVC;
             break;
@@ -1661,7 +1706,7 @@ int IntegrateBackward(Constraints& constraints, dReal sstart, dReal sdstart, dRe
 Profile StraightProfile(dReal sbackward,dReal sforward, dReal sdbackward, dReal sdforward)
 {
     std::vector<dReal> slist, sdlist, sddlist;
-    dReal dtmod = 2 * (sforward - sbackward) / (sdforward + sdbackward);
+    dReal dtmod = 2 * (sforward - sbackward) / (sdforward + sdbackward);  /// 走这一步需要的时间
     dReal sdd = (sdforward - sdbackward) / dtmod;
     slist.push_back(sbackward);
     slist.push_back(sforward);
@@ -1690,12 +1735,12 @@ int ComputeLimitingCurves(Constraints& constraints){
         const SwitchPoint& switchpoint = *itswitchpoint;
         sswitch = switchpoint.s;
         sdswitch = switchpoint.sd;
-        if(IsAboveProfilesList(sswitch,sdswitch,constraints.resprofileslist,false,0))
+        if(IsAboveProfilesList(sswitch,sdswitch,constraints.resprofileslist,false,0)) /// 在已经计算结果profile上面，直接返回
             continue;
-        if(sdswitch > constraints.SdLimitCombined(sswitch)+TINY2)
+        if(sdswitch > constraints.SdLimitCombined(sswitch)+TINY2) /// 大于约束的sd也直接返回
             continue;
 
-        // Address Switch Point
+        // Address Switch Point 
         if (!AddressSwitchPoint(constraints, switchpoint, sbackward,
                                 sdbackward, sforward, sdforward))
             continue;
@@ -1778,6 +1823,7 @@ int ComputeProfiles(Constraints& constraints, dReal sdbeg, dReal sdend){
 
 
         /////////////////  Compute the CLC /////////////////////
+        LOG(INFO) << "constraints.resprofileslist.size()=" << constraints.resprofileslist.size();
         ret = ComputeLimitingCurves(constraints);
         if(ret!=CLC_OK) {
             message = "CLC failed";
@@ -1785,7 +1831,26 @@ int ComputeProfiles(Constraints& constraints, dReal sdbeg, dReal sdend){
             integrateprofilesstatus = false;
             continue;
         }
-
+        // {
+        //   nlohmann::json j;
+        //   std::list<Profile>::iterator itprofile = constraints.resprofileslist.begin();
+        //   while(itprofile!=constraints.resprofileslist.end()) {
+        //     nlohmann::json t;
+        //     t["forward"]=itprofile->forward;
+        //     t["integrationtimestep"]=itprofile->integrationtimestep;
+        //     t["duration"]=itprofile->duration;
+        //     t["nsteps"]=itprofile->nsteps;
+        //     for (int i=0; i<itprofile->svect.size(); i++) {
+        //       t["svect"].push_back(itprofile->svect[i]);
+        //       t["sdvect"].push_back(itprofile->sdvect[i]);
+        //       t["sddvect"].push_back(itprofile->sddvect[i]);
+        //     }
+        //     j["resprofileslist"].push_back(t);
+        //     itprofile++;
+        //   }
+        //   std::ofstream o("../resprofileslist.json");
+        //   o << std::setw(2) << j << std::endl;
+        // }
 
         Profile tmpprofile;
 
@@ -1793,6 +1858,7 @@ int ComputeProfiles(Constraints& constraints, dReal sdbeg, dReal sdend){
 
         // Determine the lowest profile at t=0
         dReal bound;
+        LOG(INFO) << "constraints.resprofileslist.size()=" << constraints.resprofileslist.size();
         ProfileSample lowestsample = FindLowestProfileFast(smallincrement, INF, constraints.resprofileslist);
         if( lowestsample.itprofile != constraints.resprofileslist.end() ) {
             bound = std::min(lowestsample.sd,constraints.mvccombined[0]);
@@ -1840,7 +1906,26 @@ int ComputeProfiles(Constraints& constraints, dReal sdbeg, dReal sdend){
             integrateprofilesstatus = false;
             continue;
         }
-
+        // {
+        //   nlohmann::json j;
+        //   std::list<Profile>::iterator itprofile = constraints.resprofileslist.begin();
+        //   while(itprofile!=constraints.resprofileslist.end()) {
+        //     nlohmann::json t;
+        //     t["forward"]=itprofile->forward;
+        //     t["integrationtimestep"]=itprofile->integrationtimestep;
+        //     t["duration"]=itprofile->duration;
+        //     t["nsteps"]=itprofile->nsteps;
+        //     for (int i=0; i<itprofile->svect.size(); i++) {
+        //       t["svect"].push_back(itprofile->svect[i]);
+        //       t["sdvect"].push_back(itprofile->sdvect[i]);
+        //       t["sddvect"].push_back(itprofile->sddvect[i]);
+        //     }
+        //     j["resprofileslist"].push_back(t);
+        //     itprofile++;
+        //   }
+        //   std::ofstream o("../resprofileslist.json");
+        //   o << std::setw(2) << j << std::endl;
+        // }
 
         /////////////////  Integrate from end /////////////////////
         // Determine the lowest profile at t = tend
@@ -1898,10 +1983,30 @@ int ComputeProfiles(Constraints& constraints, dReal sdbeg, dReal sdend){
             integrateprofilesstatus = false;
             continue;
         }
-
+        // {
+        //   nlohmann::json j;
+        //   std::list<Profile>::iterator itprofile = constraints.resprofileslist.begin();
+        //   while(itprofile!=constraints.resprofileslist.end()) {
+        //     nlohmann::json t;
+        //     t["forward"]=itprofile->forward;
+        //     t["integrationtimestep"]=itprofile->integrationtimestep;
+        //     t["duration"]=itprofile->duration;
+        //     t["nsteps"]=itprofile->nsteps;
+        //     for (int i=0; i<itprofile->svect.size(); i++) {
+        //       t["svect"].push_back(itprofile->svect[i]);
+        //       t["sdvect"].push_back(itprofile->sdvect[i]);
+        //       t["sddvect"].push_back(itprofile->sddvect[i]);
+        //     }
+        //     j["resprofileslist"].push_back(t);
+        //     itprofile++;
+        //   }
+        //   std::ofstream o("../resprofileslist.json");
+        //   o << std::setw(2) << j << std::endl;
+        // }
 
         /////////////////////// Zlajpah //////////////////////////
         // Add separation points between MVCBobrow and MVCCombined to zlajpahlist
+        LOG(INFO) << "constraints.zlajpahlist.size()=" << constraints.zlajpahlist.size();
         bool active = false;
         for(int i = 0; i<constraints.ndiscrsteps; i++) {
             if(std::abs(constraints.mvcbobrow[i]-constraints.mvccombined[i])<TINY2) {
@@ -1912,9 +2017,24 @@ int ComputeProfiles(Constraints& constraints, dReal sdbeg, dReal sdend){
             else{
                 if(active) {
                     active = false;
+                    LOG(INFO) << "zlajpahlist.push_back. constraints.discrsvect[i]=" << constraints.discrsvect[i] << ", constraints.mvccombined[i]=" << constraints.mvccombined[i];
                     constraints.zlajpahlist.push_back(std::pair<dReal,dReal>(constraints.discrsvect[i],constraints.mvccombined[i]));
                 }
             }
+        }
+        LOG(INFO) << "constraints.zlajpahlist.size()=" << constraints.zlajpahlist.size();
+        {
+          nlohmann::json j;
+          std::list<std::pair<dReal,dReal> >::iterator itzlajpah = constraints.zlajpahlist.begin();
+          while(itzlajpah!=constraints.zlajpahlist.end()) {
+            nlohmann::json t;
+            t["s"]=itzlajpah->first;
+            t["sd"]=itzlajpah->second;
+            j["zlajpahlist"].push_back(t);
+            itzlajpah++;
+          }
+          std::ofstream o("../zlajpahlist.json");
+          o << std::setw(2) << j << std::endl;
         }
 
         // Integrate forward from Zlajpah points
@@ -1940,10 +2060,29 @@ int ComputeProfiles(Constraints& constraints, dReal sdbeg, dReal sdend){
             integrateprofilesstatus = false;
             continue;
         }
-
+        // {
+        //   nlohmann::json j;
+        //   std::list<Profile>::iterator itprofile = constraints.resprofileslist.begin();
+        //   while(itprofile!=constraints.resprofileslist.end()) {
+        //     nlohmann::json t;
+        //     t["forward"]=itprofile->forward;
+        //     t["integrationtimestep"]=itprofile->integrationtimestep;
+        //     t["duration"]=itprofile->duration;
+        //     t["nsteps"]=itprofile->nsteps;
+        //     for (int i=0; i<itprofile->svect.size(); i++) {
+        //       t["svect"].push_back(itprofile->svect[i]);
+        //       t["sdvect"].push_back(itprofile->sdvect[i]);
+        //       t["sddvect"].push_back(itprofile->sddvect[i]);
+        //     }
+        //     j["resprofileslist"].push_back(t);
+        //     itprofile++;
+        //   }
+        //   std::ofstream o("../resprofileslist.json");
+        //   o << std::setw(2) << j << std::endl;
+        // }
 
         /////////////////////  Final checks /////////////////////////
-        // Check whether CLC is continuous and recover if not
+        // Check whether CLC is continuous and recover if not 修补一些断开的地方
         dReal sdiscontinuous = Recover(constraints,constraints.integrationtimestep);
         if(sdiscontinuous>-0.5) {
             message = str(boost::format("Could not recover from CLC discontinuous s=%.15e")%sdiscontinuous);
@@ -2534,7 +2673,7 @@ ProfileSample FindLowestProfileFast(dReal scur, dReal sdmax, const std::list<Pro
     bestprofile.itprofile = resprofileslist.end();
     bestprofile.sd = sdmax;
     for(std::list<Profile>::const_iterator itprofile = resprofileslist.begin(); itprofile != resprofileslist.end(); ++itprofile) {
-        if( scur >= itprofile->svect.at(0) && scur <= itprofile->svect.back() ) {
+        if( scur >= itprofile->svect.at(0) && scur <= itprofile->svect.back() ) { /// 就在这条profile上
             // find the sdcur
             dReal sdcur = 0, sddcur = 0, tcur=0;
             std::vector<dReal>::const_iterator its = std::lower_bound(itprofile->svect.begin(), itprofile->svect.end(), scur);
@@ -2546,7 +2685,7 @@ ProfileSample FindLowestProfileFast(dReal scur, dReal sdmax, const std::list<Pro
             else {
                 // have to interpolate quadratically
                 // know that s + sd*t + 0.5*sdd*t*t = scur
-                // solve for t: t = (-sd +- sqrt(sd*sd - 2*(s-scur)*sdd))/(sdd)
+                // solve for t: t = (-sd +- sqrt(sd*sd - 2*(s-scur)*sdd))/(sdd) 二元方程求根公式
                 // sdcur = sd + sdd*t = +- sqrt(sd*sd - 2*(s-scur)*sdd)
                 dReal sd = itprofile->sdvect.at(index-1);
                 sddcur = itprofile->sddvect.at(index-1);

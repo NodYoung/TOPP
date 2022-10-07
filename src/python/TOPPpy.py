@@ -110,14 +110,26 @@ def ComputeKinematicConstraints(traj, amax, discrtimestep):
     ndiscrsteps = int((traj.duration + 1e-10) / discrtimestep) + 1
     constraintstring = ""
     for i in range(ndiscrsteps):
-        t = i * discrtimestep
-        qd = traj.Evald(t)
-        qdd = traj.Evaldd(t)
+        t = i * discrtimestep # s
+        qd = traj.Evald(t)  # qds
+        qdd = traj.Evaldd(t)  # qdds
         constraintstring += "\n" + vect2str(+qd) + " " + vect2str(-qd)
         constraintstring += "\n" + vect2str(+qdd) + " " + vect2str(-qdd)
         constraintstring += "\n" + vect2str(-amax) + " " + vect2str(-amax)
     return constraintstring
 
+def ComputeKinematicConstraintsJson(traj, vmax, amax, discrtimestep):
+    # Sample the dynamics constraints
+    ndiscrsteps = int((traj.duration + 1e-10) / discrtimestep) + 1
+    constraint_json = {'discrtimestep': discrtimestep, 'vmax': [v for v in vmax], 'contraints':[]}
+    for i in range(ndiscrsteps):
+        t = i * discrtimestep # s
+        qd = traj.Evald(t)  # qds
+        qdd = traj.Evaldd(t)  # qdds
+        constraint_json['contraints'].append({'a': [d for d in qd]+[-d for d in qd], 
+                                                'b': [d for d in qdd]+[-d for d in qdd], 
+                                                'c': [-d for d in amax]+[-d for d in amax]})
+    return constraint_json
 
 ######################## Plots ############################
 

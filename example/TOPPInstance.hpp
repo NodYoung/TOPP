@@ -68,10 +68,6 @@ public:
     TOPP::dReal integrationtimestep;
     int passswitchpointnsteps, extrareps;
 
-#ifdef WITH_OPENRAVE
-    OpenRAVE::RobotBasePtr _probot;
-#endif
-
     TOPP::dReal GetAlpha(TOPP::dReal s, TOPP::dReal sd) {
         std::pair<TOPP::dReal, TOPP::dReal> sdd_lim = pconstraints->SddLimits(s, sd);
         return sdd_lim.first;

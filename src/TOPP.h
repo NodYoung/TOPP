@@ -199,14 +199,14 @@ public:
     dReal integrationtimestep; // Time step to integrate the profiles
     dReal reparamtimestep; // Time step to reparameterize the trajectory based on the optimal profile
     int passswitchpointnsteps; // Number of steps to integrate around a switch point
-    int extrareps; // Number of reps to lower the integrationtimestep when integration fails
+    int extrareps; // Number of reps to lower the integrationtimestep when integration fails 重复次数，
     dReal bisectionprecision; // Precision when determining the sd for tangent switch point
     dReal loweringcoef; // Lowerbound that multiplies sd when searching sd for tangent switch point
 
     // Maximum Velocity Curves
     int ndiscrsteps; // Number of discretization steps, around trajectory.duration/discrtimestep
-    std::vector<dReal> discrsvect; // Discretization points on the s axis
-    std::vector<dReal> mvcbobrow;
+    std::vector<dReal> discrsvect; // Discretization points on the s axis s轴上的离散化，这里是均匀离散化discrete_s_vect
+    std::vector<dReal> mvcbobrow; /// a*sdd+b*sd^2+c<=0约束下的最大速度sd曲线
     std::vector<dReal> mvccombined;
     bool hasvelocitylimits;
     std::vector<dReal> vmax;
@@ -233,13 +233,13 @@ public:
     // Compute the MVCs and the switchpoints and other initializations
     virtual bool Preprocess();
 
-    // Discretize the time interval
+    // Discretize the time interval 这个函数也会被重载
     virtual void Discretize();
 
-    // Compute the MVC given by acceleration constraints
+    // Compute the MVC given by acceleration constraints 计算a*sdd+b*sd^2+c<=0约束下的最大速度sd曲线
     virtual void ComputeMVCBobrow();
 
-    // Compute the combined MVC (incorporating pure velocity constraints)
+    // Compute the combined MVC (incorporating pure velocity constraints) 计算a*sdd+b*sd^2+c<=0和sd<=qd/qds结合的最大速度sd曲线
     virtual void ComputeMVCCombined();
 
     // Write the MVC to stringstreams
@@ -252,7 +252,7 @@ public:
         return;
     }
 
-    // Linear interpolation
+    // Linear interpolation 线性插值得到s对应的v
     virtual dReal Interpolate1D(dReal s, const std::vector<dReal>& v);
 
 
@@ -265,7 +265,7 @@ public:
     }
 
     // Compute the maximum velocity curve due to dynamics at s
-    // Called at initialization
+    // Called at initialization 计算a*sdd+b*sd^2+c<=0约束下的最大速度sd
     virtual dReal SdLimitBobrowInit(dReal s){
         std::cout << "Virtual method not implemented\n";
         throw TOPPException("Virtual method not implemented");
@@ -273,7 +273,7 @@ public:
 
     // Upper limit on sd after incorporating pure velocity constraints
     virtual dReal SdLimitCombined(dReal s);
-    virtual dReal SdLimitCombinedInit(dReal s);
+    virtual dReal SdLimitCombinedInit(dReal s); /// 计算a*sdd+b*sd^2+c<=0和sd<=qd/qds结合的sd
 
     // Pair of (lower,upper) limits on sdd
     virtual std::pair<dReal,dReal> SddLimits(dReal s, dReal sd){
@@ -351,7 +351,8 @@ public:
     //////////////// Specific members and methods //////////////////////
     int nconstraints;  // Number of constraints
     std::vector<std::vector<dReal> > avect, bvect, cvect;  // Dynamics coefficients. avect[i], bvect[i], cvect[i] are vectors of length 2*ndof where the first ndof are the upper limit, the next ndof are for the lower limit. These incorporate any upper/lower limits.
-
+    
+    // 对avect, bvect, cvect线性插值得到s处的a, b, c
     void InterpolateDynamics(dReal s, std::vector<dReal>& a, std::vector<dReal>& b, std::vector<dReal>& c);   // Linearly interpolate the dynamics coefficients a,b,c
 
 };
@@ -428,7 +429,7 @@ void ReadVectorFromStream(std::istream& s, size_t N, std::vector<dReal>& resvect
 /// \brief epsilon Used to threshold the coefficients and results to avoid dividing by 0
 bool SolveQuadraticEquation(dReal a0, dReal a1, dReal a2, dReal& sol, dReal lowerbound=-INF, dReal upperbound=INF, dReal epsilon=TINY);
 
-// Check whether the point (s,sd) is above at least one profile in the list
+// Check whether the point (s,sd) is above at least one profile in the list 参数searchbackward用不上
 bool IsAboveProfilesList(dReal s, dReal sd, const std::list<Profile>&resprofileslist, bool searchbackward=false, dReal softborder=TINY2);
 
 // Find the lowest profile (in terms of sd) at s
